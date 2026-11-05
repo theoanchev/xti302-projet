@@ -1,0 +1,13 @@
+login;nom;groupe_principal;groupes_secondaires
+theo;Théo (admin);admins;acces_ssh
+azur424;Azur (admin);admins;acces_ssh
+admin3;Membre 3 (admin);admins;acces_ssh
+support;Compte support;support;acces_ssh
+mdubois;Marc Dubois;technique;
+sleroy;Sophie Leroy;technique;
+ncarpentier;Nadia Carpentier;chercheurs;
+pfontaine;Paul Fontaine;chercheurs;
+ymoreau;Yann Moreau;doctorants;
+cgarnier;Clara Garnier;doctorants;
+invite1;Visiteur Un;invite;acces_ssh
+invite2;Visiteur Deux;invite;acces_ssh
