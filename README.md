@@ -1,6 +1,12 @@
 # Projet XTI302-CYB – Durcir un serveur Linux et le prouver
 
-Contexte choisi : _à compléter (A, B ou C)_
+Contexte choisi : **C – Laboratoire BioLab** (groupes technique, chercheurs, doctorants, invite ; les invités n'ont accès qu'en SFTP).
+
+## Prérequis
+
+- Hôte avec VirtualBox 7 et un client OpenSSH (Windows 10/11 : intégré)
+- VM Debian 13 minimale restaurée sur le snapshot `vierge`
+- Accès SSH à la VM avec un compte sudo (`theo`) le temps de lancer `installer.sh`
 
 ## Environnement
 

@@ -2,3 +2,11 @@
 *.vdi
 *.log
 .tmp/
+
+# Clés privées : jamais dans le dépôt
+id_*
+!*.pub
+*.key
+*.pem
+xti302_*
+!config/cles/*.pub
