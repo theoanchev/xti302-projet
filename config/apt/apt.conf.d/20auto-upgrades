@@ -1,0 +1,8 @@
+// /etc/apt/apt.conf.d/20auto-upgrades - exigence D1 (projet XTI302).
+// Chaque jour : mise a jour de la liste des paquets, puis installation
+// automatique des mises a jour de securite par unattended-upgrades.
+// Par defaut sur Debian, unattended-upgrades n'installe que les paquets
+// de l'origine "Debian-Security" (voir 50unattended-upgrades).
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+APT::Periodic::AutocleanInterval "7";
