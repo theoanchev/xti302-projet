@@ -10,3 +10,6 @@ id_*
 *.pem
 xti302_*
 !config/cles/*.pub
+
+# Documents de travail
+*.docx
