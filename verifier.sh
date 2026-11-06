@@ -316,7 +316,7 @@ test_B4() {
         return
     fi
 
-    # Recherche de la dernière version contenant le fichier de test B4.
+    # Recherche de la derniere version contenant le fichier de test B4.
     SNAPSHOT=""
     SOURCE=""
     for ((i=${#VERSIONS[@]} - 1; i>=0; i--)); do
