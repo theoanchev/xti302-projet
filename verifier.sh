@@ -168,6 +168,68 @@ test_scripts_root() {
 
 # ============ A completer : C3-C4, J4, B1-B4, D2, D3 (une fonction par test) ============
 
+
+# ============================ Sauvegarde (B1, B2, B3) : Adrien ============================
+
+# Versions terminees de /sauvegardes, de la plus ancienne a la plus recente.
+versions_sauvegarde() {
+    find /sauvegardes -mindepth 1 -maxdepth 1 -type d \
+        -name '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]_[0-9][0-9][0-9][0-9][0-9][0-9]' 2>/dev/null | sort
+}
+
+test_B1() {
+    local erreurs="" versions derniere avant nb liens
+    if [[ ! -x /usr/local/sbin/sauvegarde.sh ]] \
+       || [[ -n "$(find /usr/local/sbin/sauvegarde.sh \( ! -user root -o -perm /022 \) 2>/dev/null)" ]]; then
+        erreurs+=" sauvegarde.sh absent de /usr/local/sbin ou modifiable par un autre compte"
+    fi
+    mapfile -t versions < <(versions_sauvegarde)
+    nb=${#versions[@]}
+    if [[ $nb -lt 1 ]]; then
+        erreurs+=" aucune version dans /sauvegardes"
+    else
+        derniere="${versions[$((nb - 1))]}"
+        [[ -d "$derniere/srv" && -d "$derniere/etc" ]] || erreurs+=" la derniere version ne contient pas srv et etc"
+        # ACL conservees : meme ACL sur /srv/analyses dans la source et dans la sauvegarde
+        if [[ "$(getfacl -cp /srv/analyses 2>/dev/null)" != "$(getfacl -cp "$derniere/srv/analyses" 2>/dev/null)" ]]; then
+            erreurs+=" ACL de /srv/analyses non conservees"
+        fi
+        # incremental : un fichier inchange est un lien dur entre deux versions
+        if [[ $nb -ge 2 ]]; then
+            avant="${versions[$((nb - 2))]}"
+            liens="$(stat -c %h "$derniere/etc/debian_version" 2>/dev/null)"
+            [[ "${liens:-1}" -ge 2 && "$(stat -c %i "$derniere/etc/debian_version" 2>/dev/null)" == "$(stat -c %i "$avant/etc/debian_version" 2>/dev/null)" ]] \
+                || erreurs+=" sauvegarde non incrementale (fichier inchange recopie)"
+        fi
+    fi
+    if [[ -z "$erreurs" ]]; then
+        ok "B1" "sauvegarde de /srv et /etc : $nb version(s), ACL conservees, fichiers inchanges en liens durs"
+    else
+        ko "B1" "ecarts :$erreurs"
+    fi
+}
+
+test_B2() {
+    if systemctl is-enabled --quiet sauvegarde.timer \
+       && systemctl is-active --quiet sauvegarde.timer \
+       && [[ -n "$(journalctl -u sauvegarde.service --no-pager -q -n 1 2>/dev/null)" ]]; then
+        ok "B2" "sauvegarde planifiee (sauvegarde.timer) et executions journalisees"
+    else
+        ko "B2" "timer inactif ou aucune execution dans le journal de sauvegarde.service"
+    fi
+}
+
+test_B3() {
+    local admin
+    admin="$(getent group admins | cut -d: -f4 | cut -d, -f1)"
+    if [[ "$(stat -c '%U:%G %a' /sauvegardes 2>/dev/null)" == "root:admins 750" ]] \
+       && ! sudo -u mdubois test -r /sauvegardes 2>/dev/null \
+       && sudo -u "$admin" test -r /sauvegardes 2>/dev/null; then
+        ok "B3" "/sauvegardes accessible aux administrateurs seulement"
+    else
+        ko "B3" "/sauvegardes n'est pas en root:admins 750 ou est lisible par un non-administrateur"
+    fi
+}
 # ================= Comptes et droits (C1, C2) : Adrien =================
 
 # C1 : chaque compte de comptes.csv existe avec le bon groupe principal et les bons groupes secondaires.
@@ -292,6 +354,9 @@ main() {
     test_J2
     test_J3
     test_D1
+    test_B1
+    test_B2
+    test_B3
     test_B1_disque
     test_scripts_root
     echo "--- $REUSSIS / $TOTAL tests reussis"
