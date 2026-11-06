@@ -6,8 +6,6 @@ Contexte C – Laboratoire BioLab · Groupe : Théo, Adrien, El Yazid
 
 ## 1. Tableau de conformité
 
-Références ANSSI : guide *Recommandations pour un usage sécurisé d'(Open)SSH* (DAT-NT-007, 2015), noté « SSH-Rn ».
-
 | ID | Ce qui a été fait | Test (`verifier.sh`) | ANSSI |
 |---|---|---|---|
 | C1 | (à compléter – Adrien) | `test_C1` | |
@@ -115,6 +113,3 @@ Les sauvegardes sont sur le second disque, dans `/sauvegardes`, une version dat�
 6. **Prévenir l'utilisateur** et noter la restauration (date, fichier, version utilisée).
 
 Test réalisé : un fichier de test a été supprimé puis restauré depuis une version datée ; son contenu était identique après restauration (preuve : `preuves/preuve-restauration.txt`). La vérification des ACL (étape 5) est à refaire lors du passage complet, avec le `sauvegarde.sh` définitif.
-
-## Sources
-- [ANSSI – Recommandations pour un usage sécurisé d'(Open)SSH](https://messervices.cyber.gouv.fr/documents-guides/NT_OpenSSH.pdf)
