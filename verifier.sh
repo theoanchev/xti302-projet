@@ -413,7 +413,69 @@ test_D3() {
 }
 
 # ================================ Bilan ==========================================
+# B4 - Verification de la restauration et des ACL
+test_B4() {
+    local BASE="/backup/versions"
+    local PREUVE="/backup/logs/preuve-B4.txt"
+    local TMP SOURCE DEST
+    local -a VERSIONS=()
+    local i
 
+    if [[ "$(findmnt -n -o TARGET /backup 2>/dev/null)" != "/backup" ]] ||
+       [[ ! -d "$BASE" ]]; then
+        ko "B4" "disque de sauvegarde absent"
+        return
+    fi
+
+    if [[ ! -f "$PREUVE" ]] ||
+       ! grep -q "RESULTAT : SUCCES" "$PREUVE" ||
+       ! grep -q "ACL" "$PREUVE"; then
+        ko "B4" "preuve de restauration ou ACL absente"
+        return
+    fi
+
+    if ! command -v rsync >/dev/null ||
+       ! command -v getfacl >/dev/null; then
+        ko "B4" "outils de restauration absents"
+        return
+    fi
+
+    mapfile -t VERSIONS < <(
+        find "$BASE" -mindepth 1 -maxdepth 1 -type d | sort
+    )
+
+    SOURCE=""
+
+    for ((i=${#VERSIONS[@]}-1; i>=0; i--)); do
+        SOURCE=$(find "${VERSIONS[$i]}/srv" -type f \
+            -path '*/xti302-b4-*/preuve-B4.txt' -print -quit 2>/dev/null)
+        [[ -n "$SOURCE" ]] && break
+    done
+
+    if [[ -z "$SOURCE" ]]; then
+        ko "B4" "fichier de test absent des sauvegardes"
+        return
+    fi
+
+    TMP=$(mktemp -d) || {
+        ko "B4" "creation temporaire impossible"
+        return
+    }
+
+    DEST="$TMP/preuve-B4.txt"
+
+    if getfacl -cp "$SOURCE" > "$TMP/acl-avant" &&
+       rsync -aHAX --numeric-ids "$SOURCE" "$DEST" &&
+       cmp -s "$SOURCE" "$DEST" &&
+       getfacl -cp "$DEST" > "$TMP/acl-apres" &&
+       diff -q "$TMP/acl-avant" "$TMP/acl-apres" >/dev/null; then
+        ok "B4" "restauration et ACL verifiees"
+    else
+        ko "B4" "restauration ou verification ACL echouee"
+    fi
+
+    rm -rf "$TMP"
+}
 main() {
     verifier_root
     charger_sshd
