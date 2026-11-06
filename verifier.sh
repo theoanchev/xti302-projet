@@ -220,8 +220,11 @@ test_B2() {
 }
 
 test_B3() {
-    local admin
-    admin="$(getent group admins | cut -d: -f4 | cut -d, -f1)"
+    local admin gid
+    # premier admin : liste dans /etc/group ou ayant admins comme groupe principal
+    gid="$(getent group admins | cut -d: -f3)"
+    admin="$( { getent group admins | cut -d: -f4 | tr ',' '\n'
+                getent passwd | awk -F: -v g="$gid" '$4 == g { print $1 }'; } | grep -v '^$' | head -n 1)"
     if [[ "$(stat -c '%U:%G %a' /sauvegardes 2>/dev/null)" == "root:admins 750" ]] \
        && ! sudo -u mdubois test -r /sauvegardes 2>/dev/null \
        && sudo -u "$admin" test -r /sauvegardes 2>/dev/null; then
@@ -322,10 +325,16 @@ test_J1() {
     else
         ko "J1" "fail2ban inactif, jail sshd absente ou mal parametree (maxretry='$maxretry' bantime='$bantime')"
     fi
-    if nft list ruleset 2>/dev/null | grep -q 'f2b-table'; then
-        ok "J1" "les regles de bannissement de fail2ban sont presentes dans nftables"
+    # fail2ban ne cree sa table nftables qu'au premier bannissement :
+    # on verifie que la jail bannit bien via nftables (et la table si elle existe deja).
+    if fail2ban-client get sshd actions 2>/dev/null | grep -q 'nftables'; then
+        if nft list ruleset 2>/dev/null | grep -q 'f2b-table'; then
+            ok "J1" "bannissement via nftables (table f2b-table presente)"
+        else
+            ok "J1" "bannissement via nftables (table f2b-table creee au premier bannissement)"
+        fi
     else
-        ko "J1" "la table nftables de fail2ban est absente (bannissement inefficace)"
+        ko "J1" "la jail sshd ne bannit pas via nftables (bannissement inefficace)"
     fi
 }
 
@@ -492,7 +501,10 @@ test_D2() {
         return
     fi
 
+    # Le client DHCP (UDP 68) obtient l'adresse IP de la VM : il n'offre aucun service
+    # et le pare-feu bloque tout trafic entrant hors SSH (justifie dans DOSSIER.md, D2).
     if printf '%s\n' "$LISTEN" | awk '
+    $1 == "udp" && $5 ~ /:68$/ { next }
     {
         addr=$5
         sub(/^.*:/, "", addr)
@@ -504,7 +516,7 @@ test_D2() {
     END {
         exit !(count > 0 && bad == 0)
     }'; then
-        ok "D2" "seul le port SSH 22 est en ecoute"
+        ok "D2" "seul le port SSH 22 est en ecoute (hors client DHCP)"
     else
         ko "D2" "un autre port est en ecoute ou SSH est absent"
     fi

@@ -127,9 +127,19 @@ installer_sudoers() {
 # C3 : "aucun autre compte n'a sudo". Le compte cree a l'installation est dans
 # le groupe sudo : on vide ce groupe, mais seulement si des admins existent
 # deja, sinon on se retirerait tout acces administrateur.
+# Membres du groupe admins : listes dans /etc/group OU ayant admins comme groupe principal
+# (Linux ne liste pas dans /etc/group les comptes dont c'est le groupe principal).
+membres_admins() {
+    local gid
+    gid="$(getent group admins | cut -d: -f3)"
+    [[ -n "$gid" ]] || return 0
+    { getent group admins | cut -d: -f4 | tr ',' '\n'
+      getent passwd | awk -F: -v g="$gid" '$4 == g { print $1 }'; } | grep -v '^$' | sort -u
+}
+
 vider_groupe_sudo() {
     local admins membres utilisateur
-    admins="$(getent group admins | cut -d: -f4 || true)"
+    admins="$(membres_admins)"
     if [[ -z "$admins" || ! -e /etc/sudoers.d/admins ]]; then
         log "groupe admins vide ou sudoers admins absent : groupe sudo conserve"
         return 0
