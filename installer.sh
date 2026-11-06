@@ -104,6 +104,7 @@ proteger_sauvegardes() {
 creer_comptes() {
     if [[ -f "$DEPOT/creer_comptes.sh" ]]; then
         bash "$DEPOT/creer_comptes.sh" "$DEPOT/comptes.csv"
+        install -D -o root -g root -m 0644 "$DEPOT/comptes.csv" /usr/local/share/xti302/comptes.csv
         log "comptes crees"
     else
         log "creer_comptes.sh absent : etape sautee"
@@ -273,6 +274,12 @@ planifier_sauvegarde() {
         systemctl daemon-reload
         systemctl enable --now --quiet sauvegarde.timer
         log "sauvegarde planifiee (sauvegarde.timer)"
+        # Premiere sauvegarde tout de suite : verifier.sh (B1, B2, B4) a une version a controler.
+        if systemctl start sauvegarde.service; then
+            log "premiere sauvegarde effectuee"
+        else
+            log "premiere sauvegarde en echec : voir journalctl -u sauvegarde.service"
+        fi
     else
         log "config/systemd/ vide : planification sautee"
     fi

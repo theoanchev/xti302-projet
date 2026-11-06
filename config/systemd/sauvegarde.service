@@ -1,0 +1,13 @@
+# B2 : service lance par sauvegarde.timer. La sortie du script va dans le journal systemd :
+#   journalctl -u sauvegarde.service
+[Unit]
+Description=Sauvegarde incrementale de /srv et /etc sur le second disque
+# Ne demarre que si /sauvegardes est monte (evite d'ecrire sur le disque systeme).
+RequiresMountsFor=/sauvegardes
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/sauvegarde.sh
+SyslogIdentifier=sauvegarde
+Nice=10
+IOSchedulingClass=idle

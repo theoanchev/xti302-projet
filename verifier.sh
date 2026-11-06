@@ -11,6 +11,11 @@ set -u
 
 REUSSIS=0
 TOTAL=0
+CSV=""
+for candidat in "$(dirname "$(readlink -f "$0")")/comptes.csv" ./comptes.csv /usr/local/share/xti302/comptes.csv; do
+    [[ -r "$candidat" ]] && { CSV="$candidat"; break; }
+done
+
 
 ok() { REUSSIS=$((REUSSIS + 1)); TOTAL=$((TOTAL + 1)); echo "[OK] $1 $2"; }
 ko() { TOTAL=$((TOTAL + 1)); echo "[KO] $1 $2"; }
@@ -164,7 +169,178 @@ test_scripts_root() {
     fi
 }
 
-# ===================== Membre 3 : C3, C4, J4, B4, D2, D3 =====================
+# ============================ Sauvegarde (B1, B2, B3) : Adrien ============================
+
+# Versions terminees de /sauvegardes, de la plus ancienne a la plus recente.
+versions_sauvegarde() {
+    find /sauvegardes -mindepth 1 -maxdepth 1 -type d \
+        -name '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]_[0-9][0-9][0-9][0-9][0-9][0-9]' 2>/dev/null | sort
+}
+
+test_B1() {
+    local erreurs="" versions derniere avant nb liens
+    if [[ ! -x /usr/local/sbin/sauvegarde.sh ]] \
+       || [[ -n "$(find /usr/local/sbin/sauvegarde.sh \( ! -user root -o -perm /022 \) 2>/dev/null)" ]]; then
+        erreurs+=" sauvegarde.sh absent de /usr/local/sbin ou modifiable par un autre compte"
+    fi
+    mapfile -t versions < <(versions_sauvegarde)
+    nb=${#versions[@]}
+    if [[ $nb -lt 1 ]]; then
+        erreurs+=" aucune version dans /sauvegardes"
+    else
+        derniere="${versions[$((nb - 1))]}"
+        [[ -d "$derniere/srv" && -d "$derniere/etc" ]] || erreurs+=" la derniere version ne contient pas srv et etc"
+        # ACL conservees : meme ACL sur /srv/analyses dans la source et dans la sauvegarde
+        if [[ "$(getfacl -cp /srv/analyses 2>/dev/null)" != "$(getfacl -cp "$derniere/srv/analyses" 2>/dev/null)" ]]; then
+            erreurs+=" ACL de /srv/analyses non conservees"
+        fi
+        # incremental : un fichier inchange est un lien dur entre deux versions
+        if [[ $nb -ge 2 ]]; then
+            avant="${versions[$((nb - 2))]}"
+            liens="$(stat -c %h "$derniere/etc/debian_version" 2>/dev/null)"
+            [[ "${liens:-1}" -ge 2 && "$(stat -c %i "$derniere/etc/debian_version" 2>/dev/null)" == "$(stat -c %i "$avant/etc/debian_version" 2>/dev/null)" ]] \
+                || erreurs+=" sauvegarde non incrementale (fichier inchange recopie)"
+        fi
+    fi
+    if [[ -z "$erreurs" ]]; then
+        ok "B1" "sauvegarde de /srv et /etc : $nb version(s), ACL conservees, fichiers inchanges en liens durs"
+    else
+        ko "B1" "ecarts :$erreurs"
+    fi
+}
+
+test_B2() {
+    if systemctl is-enabled --quiet sauvegarde.timer \
+       && systemctl is-active --quiet sauvegarde.timer \
+       && [[ -n "$(journalctl -u sauvegarde.service --no-pager -q -n 1 2>/dev/null)" ]]; then
+        ok "B2" "sauvegarde planifiee (sauvegarde.timer) et executions journalisees"
+    else
+        ko "B2" "timer inactif ou aucune execution dans le journal de sauvegarde.service"
+    fi
+}
+
+test_B3() {
+    local admin
+    admin="$(getent group admins | cut -d: -f4 | cut -d, -f1)"
+    if [[ "$(stat -c '%U:%G %a' /sauvegardes 2>/dev/null)" == "root:admins 750" ]] \
+       && ! sudo -u mdubois test -r /sauvegardes 2>/dev/null \
+       && sudo -u "$admin" test -r /sauvegardes 2>/dev/null; then
+        ok "B3" "/sauvegardes accessible aux administrateurs seulement"
+    else
+        ko "B3" "/sauvegardes n'est pas en root:admins 750 ou est lisible par un non-administrateur"
+    fi
+}
+
+# ================= Comptes et droits (C1, C2) : Adrien =================
+
+# C1 : chaque compte de comptes.csv existe avec le bon groupe principal et les bons groupes secondaires.
+test_C1() {
+    local login _nom gp gs g erreurs=""
+    if [[ -z "$CSV" ]]; then
+        ko "C1" "comptes.csv introuvable (lancer verifier.sh depuis la racine du depot)"
+        return
+    fi
+    while IFS=";" read -r login _nom gp gs; do
+        [[ -n "$login" ]] || continue
+        if ! id "$login" >/dev/null 2>&1; then
+            erreurs+=" $login(absent)"
+            continue
+        fi
+        [[ "$(id -gn "$login")" == "$gp" ]] || erreurs+=" $login(groupe principal != $gp)"
+        for g in ${gs//,/ }; do
+            id -nG "$login" | tr ' ' '\n' | grep -qx "$g" || erreurs+=" $login(pas dans $g)"
+        done
+    done < <(tail -n +2 "$CSV" | tr -d '\r')
+
+    if [[ -z "$erreurs" ]]; then
+        ok "C1" "tous les comptes de comptes.csv existent avec les bons groupes"
+    else
+        ko "C1" "ecarts :$erreurs"
+    fi
+}
+
+# C2 : droits sur /srv (ce qui doit marcher ET ce qui doit etre refuse) + ACL par defaut.
+test_C2() {
+    local erreurs="" ligne user droit chemin attendu reel f
+    local regles=(
+        "mdubois:r:/srv/donnees_brutes:oui"
+        "mdubois:w:/srv/donnees_brutes:oui"
+        "ncarpentier:r:/srv/donnees_brutes:oui"
+        "ncarpentier:w:/srv/donnees_brutes:non"
+        "ymoreau:r:/srv/donnees_brutes:oui"
+        "ymoreau:w:/srv/donnees_brutes:non"
+        "invite1:r:/srv/donnees_brutes:non"
+        "ncarpentier:w:/srv/analyses:oui"
+        "ymoreau:w:/srv/analyses:oui"
+        "mdubois:r:/srv/analyses:non"
+        "invite1:r:/srv/analyses:non"
+        "ncarpentier:w:/srv/publications:oui"
+        "ymoreau:r:/srv/publications:oui"
+        "ymoreau:w:/srv/publications:non"
+        "invite1:r:/srv/publications:oui"
+        "invite1:w:/srv/publications:non"
+        "mdubois:r:/srv/publications:non"
+    )
+
+    for ligne in "${regles[@]}"; do
+        IFS=: read -r user droit chemin attendu <<< "$ligne"
+        if sudo -u "$user" test "-$droit" "$chemin" 2>/dev/null; then reel="oui"; else reel="non"; fi
+        [[ "$reel" == "$attendu" ]] || erreurs+=" $user -$droit $chemin (attendu: $attendu)"
+    done
+
+    # ACL par defaut : un fichier cree plus tard doit heriter des droits du dossier.
+    f="/srv/donnees_brutes/.test_c2_verifier"
+    if sudo -u mdubois touch "$f" 2>/dev/null; then
+        sudo -u ncarpentier test -r "$f" 2>/dev/null || erreurs+=" ACL par defaut : un chercheur ne lit pas un nouveau fichier"
+        sudo -u ncarpentier test -w "$f" 2>/dev/null && erreurs+=" ACL par defaut : un chercheur ecrit dans un fichier de technique"
+        rm -f "$f"
+    else
+        erreurs+=" technique ne peut pas creer de fichier dans donnees_brutes"
+    fi
+
+    if [[ -z "$erreurs" ]]; then
+        ok "C2" "droits /srv conformes (autorises et refuses) et ACL par defaut actives"
+    else
+        ko "C2" "ecarts :$erreurs"
+    fi
+}
+
+
+# ======================= Journaux et defense (J1, J3) : Adrien =======================
+
+# J1 : fail2ban actif, jail sshd en marche et parametree, regles presentes dans nftables.
+test_J1() {
+    local maxretry bantime
+    maxretry="$(fail2ban-client get sshd maxretry 2>/dev/null)"
+    bantime="$(fail2ban-client get sshd bantime 2>/dev/null)"
+    if systemctl is-active --quiet fail2ban \
+       && systemctl is-enabled --quiet fail2ban \
+       && fail2ban-client status sshd >/dev/null 2>&1 \
+       && [[ "$maxretry" =~ ^[0-9]+$ && "$maxretry" -ge 1 && "$maxretry" -le 5 ]] \
+       && [[ "$bantime" =~ ^[0-9]+$ && "$bantime" -ge 600 ]]; then
+        ok "J1" "fail2ban protege SSH (jail sshd : $maxretry echecs, bannissement ${bantime}s)"
+    else
+        ko "J1" "fail2ban inactif, jail sshd absente ou mal parametree (maxretry='$maxretry' bantime='$bantime')"
+    fi
+    if nft list ruleset 2>/dev/null | grep -q 'f2b-table'; then
+        ok "J1" "les regles de bannissement de fail2ban sont presentes dans nftables"
+    else
+        ko "J1" "la table nftables de fail2ban est absente (bannissement inefficace)"
+    fi
+}
+
+# J3 : le journal systemd est conserve apres un redemarrage.
+test_J3() {
+    if grep -rqsE '^[[:space:]]*Storage=persistent' /etc/systemd/journald.conf /etc/systemd/journald.conf.d \
+       && [[ -d /var/log/journal ]] \
+       && find /var/log/journal -name '*.journal' 2>/dev/null | grep -q .; then
+        ok "J3" "journal persistant (Storage=persistent, fichiers dans /var/log/journal)"
+    else
+        ko "J3" "le journal n'est pas persistant (il sera perdu au redemarrage)"
+    fi
+}
+
+# ===================== El Yazid : C3, C4, J4, B4, D2, D3 =====================
 
 # C3 - Verification des droits sudo
 test_C3() {
@@ -281,83 +457,30 @@ MOCK
     rm -rf "$TMP"
 }
 
-# B4 - Verification non destructive de la restauration et des ACL
-# Le test utilise une sauvegarde reelle du dossier de test /srv/xti302-b4-*/.
-# Il restaure une copie dans /tmp : aucun fichier original n'est supprime.
+# B4 - Restauration (non destructive) depuis la derniere sauvegarde : contenu et ACL.
+# On restaure /srv/analyses de la derniere version dans un dossier temporaire,
+# puis on compare le contenu avec la sauvegarde et les ACL avec l'original.
 test_B4() {
-    local BASE="/backup/versions"
-    local PREUVE="/backup/logs/preuve-B4.txt"
-    local TMP SNAPSHOT SOURCE DEST
-    local META_SOURCE META_RESTAUREE
-    local -a VERSIONS=()
-    local i
-
-    if [[ "$(findmnt -n -o TARGET /backup 2>/dev/null)" != "/backup" ]] ||
-       [[ ! -d "$BASE" ]]; then
-        ko "B4" "disque de sauvegarde /backup absent ou non monte"
+    local versions derniere tmp
+    mapfile -t versions < <(versions_sauvegarde)
+    if [[ ${#versions[@]} -eq 0 ]]; then
+        ko "B4" "aucune version dans /sauvegardes, restauration impossible"
         return
     fi
-
-    if [[ ! -r "$PREUVE" ]] ||
-       ! grep -q 'RESULTAT : SUCCES' "$PREUVE" ||
-       ! grep -q 'ACL' "$PREUVE"; then
-        ko "B4" "preuve de restauration ou de verification ACL absente"
+    derniere="${versions[-1]}"
+    if [[ ! -d "$derniere/srv/analyses" ]]; then
+        ko "B4" "/srv/analyses absent de la derniere version ($(basename "$derniere"))"
         return
     fi
-
-    if ! command -v rsync >/dev/null 2>&1 || ! command -v getfacl >/dev/null 2>&1; then
-        ko "B4" "rsync ou getfacl absent"
-        return
-    fi
-
-    mapfile -t VERSIONS < <(find "$BASE" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
-    if [[ "${#VERSIONS[@]}" -eq 0 ]]; then
-        ko "B4" "aucune version de sauvegarde disponible"
-        return
-    fi
-
-    # Recherche de la derniere version contenant le fichier de test B4.
-    SNAPSHOT=""
-    SOURCE=""
-    for ((i=${#VERSIONS[@]} - 1; i>=0; i--)); do
-        local CANDIDATE="$BASE/${VERSIONS[$i]}"
-        local FOUND
-        FOUND=$(find "$CANDIDATE/srv" -type f -path '*/xti302-b4-*/preuve-B4.txt' -print -quit 2>/dev/null)
-        if [[ -n "$FOUND" ]]; then
-            SNAPSHOT="$CANDIDATE"
-            SOURCE="$FOUND"
-            break
-        fi
-    done
-
-    if [[ -z "$SOURCE" ]]; then
-        ko "B4" "fichier de test B4 absent des sauvegardes"
-        return
-    fi
-
-    TMP=$(mktemp -d) || {
-        ko "B4" "creation du dossier temporaire impossible"
-        return
-    }
-    DEST="$TMP/preuve-B4-restauree.txt"
-
-    if getfacl -cp "$SOURCE" > "$TMP/acl-source" &&
-       rsync -aHAX --numeric-ids "$SOURCE" "$DEST" &&
-       cmp -s "$SOURCE" "$DEST" &&
-       getfacl -cp "$DEST" > "$TMP/acl-restauree"; then
-        META_SOURCE=$(stat -c '%u:%g:%a' "$SOURCE")
-        META_RESTAUREE=$(stat -c '%u:%g:%a' "$DEST")
-        if diff -q "$TMP/acl-source" "$TMP/acl-restauree" >/dev/null &&
-           [[ "$META_SOURCE" == "$META_RESTAUREE" ]]; then
-            ok "B4" "copie restauree depuis une sauvegarde, contenu et ACL verifies"
-        else
-            ko "B4" "permissions ou ACL differentes apres restauration"
-        fi
+    tmp="$(mktemp -d)" || { ko "B4" "creation du dossier temporaire impossible"; return; }
+    if rsync -aAXH --numeric-ids "$derniere/srv/analyses/" "$tmp/analyses/" \
+       && diff -r "$derniere/srv/analyses" "$tmp/analyses" >/dev/null \
+       && [[ "$(getfacl -cp /srv/analyses 2>/dev/null)" == "$(getfacl -cp "$tmp/analyses" 2>/dev/null)" ]]; then
+        ok "B4" "restauration de /srv/analyses depuis $(basename "$derniere") : contenu et ACL identiques"
     else
-        ko "B4" "restauration depuis la sauvegarde impossible"
+        ko "B4" "restauration echouee ou ACL differentes apres restauration"
     fi
-
-    rm -rf "$TMP"
+    rm -rf "$tmp"
 }
 
 # D2 - Verification des ports en ecoute
@@ -413,86 +536,30 @@ test_D3() {
 }
 
 # ================================ Bilan ==========================================
-# B4 - Verification de la restauration et des ACL
-test_B4() {
-    local BASE="/backup/versions"
-    local PREUVE="/backup/logs/preuve-B4.txt"
-    local TMP SOURCE DEST
-    local -a VERSIONS=()
-    local i
-
-    if [[ "$(findmnt -n -o TARGET /backup 2>/dev/null)" != "/backup" ]] ||
-       [[ ! -d "$BASE" ]]; then
-        ko "B4" "disque de sauvegarde absent"
-        return
-    fi
-
-    if [[ ! -f "$PREUVE" ]] ||
-       ! grep -q "RESULTAT : SUCCES" "$PREUVE" ||
-       ! grep -q "ACL" "$PREUVE"; then
-        ko "B4" "preuve de restauration ou ACL absente"
-        return
-    fi
-
-    if ! command -v rsync >/dev/null ||
-       ! command -v getfacl >/dev/null; then
-        ko "B4" "outils de restauration absents"
-        return
-    fi
-
-    mapfile -t VERSIONS < <(
-        find "$BASE" -mindepth 1 -maxdepth 1 -type d | sort
-    )
-
-    SOURCE=""
-
-    for ((i=${#VERSIONS[@]}-1; i>=0; i--)); do
-        SOURCE=$(find "${VERSIONS[$i]}/srv" -type f \
-            -path '*/xti302-b4-*/preuve-B4.txt' -print -quit 2>/dev/null)
-        [[ -n "$SOURCE" ]] && break
-    done
-
-    if [[ -z "$SOURCE" ]]; then
-        ko "B4" "fichier de test absent des sauvegardes"
-        return
-    fi
-
-    TMP=$(mktemp -d) || {
-        ko "B4" "creation temporaire impossible"
-        return
-    }
-
-    DEST="$TMP/preuve-B4.txt"
-
-    if getfacl -cp "$SOURCE" > "$TMP/acl-avant" &&
-       rsync -aHAX --numeric-ids "$SOURCE" "$DEST" &&
-       cmp -s "$SOURCE" "$DEST" &&
-       getfacl -cp "$DEST" > "$TMP/acl-apres" &&
-       diff -q "$TMP/acl-avant" "$TMP/acl-apres" >/dev/null; then
-        ok "B4" "restauration et ACL verifiees"
-    else
-        ko "B4" "restauration ou verification ACL echouee"
-    fi
-
-    rm -rf "$TMP"
-}
 main() {
     verifier_root
     charger_sshd
+    test_C1
+    test_C2
+    test_C3
+    test_scripts_root
+    test_C4
     test_S1
     test_S2
     test_S3
     test_S4
     test_S5
     test_S_invite
+    test_J1
     test_J2
-    test_D1
-    test_B1_disque
-    test_scripts_root
-    test_C3
-    test_C4
+    test_J3
     test_J4
+    test_B1_disque
+    test_B1
+    test_B2
+    test_B3
     test_B4
+    test_D1
     test_D2
     test_D3
     echo "--- $REUSSIS / $TOTAL tests reussis"

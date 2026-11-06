@@ -2,14 +2,12 @@
 
 Contexte C – Laboratoire BioLab · Groupe : Théo, Adrien, El Yazid
 
-> Sections marquées **(à compléter – Adrien)** : à remplir par la personne responsable de l'exigence.
-
 ## 1. Tableau de conformité
 
 | ID | Ce qui a été fait | Test (`verifier.sh`) | ANSSI |
 |---|---|---|---|
-| C1 | (à compléter – Adrien) | `test_C1` | |
-| C2 | (à compléter – Adrien) | `test_C2` | |
+| C1 |creer_comptes.sh lit comptes.csv, crée les groupes puis les comptes (useradd ou usermod si le compte existe), met /usr/sbin/nologin aux membres de invite et installe les clés publiques de config/cles/. Idempotent : l’existence de chaque groupe et de chaque compte est testée avant création.| `test_C1` | |
+| C2 |/srv/donnees_brutes, /srv/analyses et /srv/publications en root:root 0700, puis ACL par groupe (setfacl -m) et ACL par défaut (setfacl -d -m) pour les fichiers futurs. setfacl -b au début remet les ACL à zéro à chaque exécution.| `test_C2` | |
 | C3 | Le groupe admins possède les droits sudo. Le compte support peut uniquement lancer le script `analyse_logs.sh` en tant que root. Les fichiers sudoers sont vérifiés avec `visudo` et installés avec les droits 0440. | `test_C3`, `test_scripts_root` | |
 | C4 | Le compte root est verrouillé avec `passwd -l root`. Les répertoires personnels sont protégés avec les droits 0700. La valeur `HOME_MODE 0700` est également prévue pour les nouveaux comptes. | `test_C4` | |
 | S1 | `PasswordAuthentication no`, `KbdInteractiveAuthentication no`, `AuthenticationMethods publickey` ; clés ed25519 | `test_S1` ; depuis l'hôte : `ssh -o PubkeyAuthentication=no` → « Permission denied (publickey) » | SSH-R17 |
@@ -17,19 +15,27 @@ Contexte C – Laboratoire BioLab · Groupe : Théo, Adrien, El Yazid
 | S3 | `AllowGroups acces_ssh` ; invités limités au SFTP (`Match Group invite`, `ForceCommand internal-sftp`, `PermitTTY no`) | `test_S3`, `test_S_invite` | SSH-R22, SSH-R24 |
 | S4 | `MaxAuthTries 3`, `LoginGraceTime 30`, `ChannelTimeout session=10m`, `ClientAliveInterval 300` × `ClientAliveCountMax 2` | `test_S4` (2 tests) | |
 | S5 | `/etc/ssh/sshd_config.d/10-durcissement.conf` (root, 0644) ; `installer.sh` lance `sshd -t` avant `systemctl reload ssh` et retire le fichier s'il est invalide | `test_S5` | |
-| J1 | (à compléter – Adrien) | `test_J1` | |
+| J1 | Jail `sshd` dans `config/fail2ban/jail.d/sshd.conf` : lecture du journal systemd, 3 échecs en 10 minutes, adresse bannie 1 heure via nftables (table `f2b-table`). Installée par `installer.sh`, après le pare-feu | `test_J1` (2 tests) | |
 | J2 | `/etc/nftables.conf` : table `inet filtre`, entrée `policy drop`, acceptées : connexions établies, boucle locale, TCP 22 ; transit `drop` ; service `nftables` activé au démarrage | `test_J2` (2 tests) ; depuis l'hôte : `nmap` ne voit que le port 22 | SSH-R27 (complément pare-feu) |
-| J3 | (à compléter – Adrien) | `test_J3` | |
+| J3 | `Storage=persistent` dans `config/journald.conf`, installé par `installer.sh` sous `/etc/systemd/journald.conf.d/persistant.conf` | `test_J3` | |
 | J4 | Le script `analyse_logs.sh` lit les journaux SSH avec `journalctl`. Il affiche les tentatives échouées par IP, les comptes ciblés et les connexions réussies. Le seuil est réglable et une alerte renvoie un code de sortie différent de zéro. | `test_J4` | |
-| B1 | Second disque (2 Go) formaté une seule fois en ext4, étiquette `sauvegardes`, monté sur `/sauvegardes` par UUID dans `/etc/fstab` (`nodev,nosuid,noexec,nofail`). Script `sauvegarde.sh` : (à compléter – Adrien) | `test_B1_disque`, `test_B1` | |
-| B2 | (à compléter – Adrien) | `test_B2` | |
-| B3 | `/sauvegardes` : `root:admins`, 0750 (dans `installer.sh`) | `test_B3` (à compléter – Adrien) | |
-| B4 | Un fichier de test est supprimé puis restauré depuis une sauvegarde datée avec rsync. Son contenu est vérifié après la restauration. Les ACL doivent également être vérifiées avec `getfacl`. | `test_B4` (à ajouter dans `verifier.sh`) | |
+| B1 | Second disque (2 Go) formaté une seule fois en ext4, étiquette `sauvegardes`, monté sur `/sauvegardes` par UUID dans `/etc/fstab` (`nodev,nosuid,noexec,nofail`). `sauvegarde.sh` copie `/srv` et `/etc` avec `rsync -aAXH --link-dest` : une version datée par exécution (`/sauvegardes/AAAA-MM-JJ_HHMMSS`), fichiers inchangés en liens durs vers la version précédente (incrémental), droits et ACL conservés, 7 dernières versions gardées | `test_B1_disque`, `test_B1` | |
+| B2 | `config/systemd/sauvegarde.service` + `sauvegarde.timer` : tous les jours à 02:00, `Persistent=true` (sauvegarde manquée lancée au démarrage suivant). Exécutions journalisées : `journalctl -u sauvegarde.service`. `installer.sh` active le timer et lance une première sauvegarde | `test_B2` | |
+| B3 | `/sauvegardes` en `root:admins`, 0750 (dans `installer.sh`) ; chaque version est créée en 0750, groupe `admins` : seuls les administrateurs lisent les sauvegardes | `test_B3` | |
+| B4 | Restauration testée selon la procédure de la partie 4 : contenu identique et ACL conservées. `verifier.sh` restaure `/srv/analyses` depuis la dernière version dans un dossier temporaire (sans toucher à l'original) et compare le contenu et les ACL | `test_B4` ; preuve `preuves/preuve-restauration.txt` | |
 | D1 | Paquet `unattended-upgrades` ; `/etc/apt/apt.conf.d/20auto-upgrades` : liste des paquets et mises à jour de sécurité chaque jour ; minuteurs `apt-daily*` activés | `test_D1` | |
 | D2 | `ss -tulpn` : seul `sshd` écoute en TCP, sur le port 22 (IPv4 et IPv6). Toute autre écoute éventuelle est justifiée dans les choix techniques | `test_D2` ; preuve `preuves/preuve-D2.txt` | |
 | D3 | Recherche des fichiers et répertoires modifiables par tous, hors `/proc`, `/sys`, `/dev`, `/run`, `/tmp`, `/var/tmp` : aucun trouvé. Liste des fichiers SUID établie et expliquée | `test_D3` (2 tests) ; preuve `preuves/preuve-D3.txt` | |
 
 ## 2. Choix techniques
+
+### Comptes et droits sur /srv (Adrien)
+- **ACL plutôt que de simples groupes propriétaires** : un dossier n'a qu'un groupe propriétaire. Les ACL permettent des droits différents pour plusieurs groupes sur le même dossier (ex. chercheurs en écriture et doctorants en lecture sur /srv/publications).
+- **ACL par défaut** : sans elles, un fichier créé plus tard par un utilisateur n'hériterait pas des droits du dossier.
+- **`rwX` avec un X majuscule** : l'exécution n'est donnée qu'aux dossiers (pour les traverser), pas aux fichiers ordinaires.
+- **Dossiers en 0700 et `o::---`** : les « autres » n'ont aucun droit, aujourd'hui comme pour les fichiers futurs.
+- **Aucun mot de passe dans le dépôt** : les mots de passe des administrateurs sont définis à la main après l'installation (`passwd`), et la connexion SSH se fait par clé.
+- **`usermod -a -G`** : ajoute des groupes sans en retirer, pour ne pas supprimer par erreur un groupe déjà attribué.
 
 ### Accès SSH (Théo)
 - **3 essais au lieu de 4** : un utilisateur légitime avec une clé réussit du premier coup. 3 laisse de la marge si plusieurs clés sont proposées. Au-delà, fail2ban (J1) bannit l'adresse.
@@ -84,8 +90,25 @@ Contexte C – Laboratoire BioLab · Groupe : Théo, Adrien, El Yazid
 
 La liste exacte est à relever sur la VM du projet (`find / -xdev -type f -perm -4000`) : tout fichier SUID qui n'est pas dans ce tableau doit être expliqué ou retiré.
 
-### Comptes, fail2ban, journal persistant, sauvegarde (Adrien)
-(à compléter – Adrien)
+### Journaux, fail2ban et sauvegarde (Adrien)
+- **`backend = systemd`** : sur une Debian 13 minimale, il n'y a pas de fichier `/var/log/auth.log`. fail2ban lit donc directement le journal systemd (unité `ssh.service`).
+- **`filter = sshd[mode=aggressive]`** : ce mode regroupe les modes `normal`, `ddos` et `extra`, et détecte donc aussi les connexions abandonnées avant authentification, que le mode par défaut laisse passer.
+- **`maxretry = 3`** : aligné sur `MaxAuthTries 3` de SSH. Un utilisateur légitime avec sa clé n'échoue pas.
+- **`findtime = 10m`** : les 3 échecs doivent tenir dans cette fenêtre, pour que des erreurs espacées dans la journée ne bannissent personne.
+- **`bantime = 1h`** : le mot de passe étant désactivé, le bannissement ne protège pas d'une devinette (impossible) mais réduit le bruit et la charge des tentatives automatisées. Une heure décourage les robots sans bloquer longtemps un administrateur qui se trompe.
+- **`banaction = nftables`** : le bannissement passe par le pare-feu de Théo, dans une table séparée (`f2b-table`), qui n'est pas supprimée lors du rechargement de `nftables.conf`.
+- **Aucun `ignoreip` ajouté** : l'adresse de l'hôte n'est pas exemptée, le bannissement s'applique donc aussi à nos propres tests. Le débannissement se fait avec `fail2ban-client set sshd unbanip <IP>`.
+- **`Storage=persistent` (J3)** : par défaut (`auto`), le journal reste en mémoire et disparaît au redémarrage tant que `/var/log/journal` n'existe pas. `persistent` l'écrit sur le disque et le crée si besoin, ce qui permet d'analyser une attaque après un redémarrage. `analyse_logs.sh` et les traces de fail2ban en dépendent.
+- **Sauvegarde par `rsync --link-dest` (B1)** : chaque exécution crée une version complète et datée (`/sauvegardes/AAAA-MM-JJ_HHMMSS`), mais un fichier inchangé n'est pas recopié : c'est un lien dur vers la version précédente. On peut donc restaurer n'importe quelle version sans occuper plusieurs fois la place sur le disque.
+- **Options `-aAXH --numeric-ids`** : droits, propriétaires, ACL, attributs étendus et liens durs sont conservés, avec les numéros d'utilisateur et de groupe (pas les noms), pour une restauration fidèle même si les comptes changent.
+- **`/srv` et `/etc`** : les données du laboratoire et toute la configuration du serveur. Le système lui-même se réinstalle avec `installer.sh`.
+- **7 versions gardées** : une semaine d'historique avec une sauvegarde par jour ; les plus anciennes sont supprimées automatiquement pour ne pas remplir le disque.
+- **Version écrite d'abord dans un dossier `.en_cours`**, puis renommée une fois complète : une sauvegarde interrompue n'est jamais prise pour une version valide.
+- **`mountpoint -q /sauvegardes` avant de commencer** : si le second disque est absent, le script s'arrête au lieu d'écrire les sauvegardes sur le disque système. Le service a aussi `RequiresMountsFor=/sauvegardes`.
+- **`flock`** : deux sauvegardes ne peuvent pas tourner en même temps (par exemple le timer et un lancement à la main).
+- **Timer systemd plutôt que cron (B2)** : tous les jours à 2 h ; avec `Persistent=true`, une sauvegarde manquée parce que le serveur était éteint est lancée au démarrage suivant. La sortie va dans le journal (`journalctl -u sauvegarde.service`), ce qui sert de preuve d'exécution.
+- **Priorité basse (`Nice=10`, `IOSchedulingClass=idle`)** : la sauvegarde ne ralentit pas le serveur pendant qu'il est utilisé.
+- **`/sauvegardes` en `root:admins` 0750, versions en 0750 (B3)** : les sauvegardes contiennent toutes les données de `/srv` ; un doctorant ou un invité ne doit pas pouvoir les lire par ce biais.
 
 ## 3. Défense
 
@@ -99,9 +122,7 @@ La liste exacte est à relever sur la VM du projet (`find / -xdev -type f -perm 
 
 ## 4. Procédure de restauration d'une sauvegarde
 
-> À vérifier avec `sauvegarde.sh` d'Adrien : noms des versions et sous-répertoires.
-
-Les sauvegardes sont sur le second disque, dans `/sauvegardes`, une version datée par exécution (par exemple `/sauvegardes/2026-11-12_0200/srv/...`). Exemple : un chercheur a supprimé par erreur `/srv/analyses/resultats.csv`.
+Les sauvegardes sont sur le second disque, dans `/sauvegardes`, une version datée par exécution (par exemple `/sauvegardes/2026-11-12_020000/srv/...`, une nouvelle chaque nuit à 2 h). Exemple : un chercheur a supprimé par erreur `/srv/analyses/resultats.csv`.
 
 1. **Lister les versions disponibles** (en administrateur) : `sudo ls /sauvegardes`
 2. **Trouver une version qui contient encore le fichier** : `sudo ls -l /sauvegardes/<version>/srv/analyses/`
@@ -112,4 +133,4 @@ Les sauvegardes sont sur le second disque, dans `/sauvegardes`, une version dat�
 5. **Vérifier les droits** : `getfacl /srv/analyses/resultats.csv` doit montrer les mêmes ACL qu'avant (chercheurs et doctorants en lecture et écriture).
 6. **Prévenir l'utilisateur** et noter la restauration (date, fichier, version utilisée).
 
-Test réalisé : un fichier de test a été supprimé puis restauré depuis une version datée ; son contenu était identique après restauration (preuve : `preuves/preuve-restauration.txt`). La vérification des ACL (étape 5) est à refaire lors du passage complet, avec le `sauvegarde.sh` définitif.
+Test réalisé : un fichier de test a été supprimé puis restauré depuis une version datée ; son contenu était identique après restauration (preuve : `preuves/preuve-restauration.txt`). La vérification du contenu et des ACL est aussi faite automatiquement par `test_B4` dans `verifier.sh`.

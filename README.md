@@ -41,7 +41,13 @@ sudo ./verifier.sh      # teste chaque exigence ([OK] / [KO])
 
 ```
 vm/                 outils côté hôte (restauration du snapshot)
-config/             sshd_config.d, sudoers.d, nftables, fail2ban, journald, clés publiques
-installer.sh  creer_comptes.sh  comptes.csv  analyse_logs.sh  sauvegarde.sh  verifier.sh   (à venir)
-DOSSIER.md          (à venir)
+config/             sshd_config.d, sudoers.d, nftables, fail2ban, journald, apt, systemd (timer de sauvegarde), clés publiques
+preuves/            sorties de commandes qui prouvent les exigences
+installer.sh        installe et configure tout depuis le snapshot vierge
+creer_comptes.sh    comptes, groupes, /srv et ACL (lit comptes.csv)
+comptes.csv         liste des comptes du laboratoire
+analyse_logs.sh     analyse des connexions SSH (seuil dans config/analyse-logs)
+sauvegarde.sh       sauvegarde incrémentale de /srv et /etc sur le second disque
+verifier.sh         teste chaque exigence ([OK] / [KO])
+DOSSIER.md          tableau de conformité, choix techniques, défense, restauration
 ```

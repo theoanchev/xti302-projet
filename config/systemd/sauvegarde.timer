@@ -1,0 +1,11 @@
+# B2 : sauvegarde planifiee tous les jours a 02h00.
+# Persistent=true : si la machine etait eteinte a 02h00, la sauvegarde part au demarrage suivant.
+[Unit]
+Description=Sauvegarde quotidienne de /srv et /etc
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
