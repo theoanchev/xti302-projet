@@ -1,0 +1,23 @@
+===== PREUVE D3 - AUDIT DES PERMISSIONS =====
+Fri Nov  6 09:56:09 AM CET 2026
+
+===== FICHIERS ET DOSSIERS ACCESSIBLES EN ECRITURE PAR TOUS =====
+
+===== FICHIERS SUID =====
+4755 root:root /usr/bin/mount
+4755 root:root /usr/bin/sudo
+4755 root:root /usr/bin/su
+4755 root:root /usr/bin/ntfs-3g
+4755 root:root /usr/bin/chfn
+4755 root:root /usr/bin/umount
+4755 root:root /usr/bin/pkexec
+4755 root:root /usr/bin/gpasswd
+4755 root:root /usr/bin/newgrp
+4755 root:root /usr/bin/fusermount3
+4755 root:root /usr/bin/passwd
+4755 root:root /usr/bin/chsh
+4754 root:dip /usr/sbin/pppd
+4755 root:root /usr/lib/polkit-1/polkit-agent-helper-1
+4755 root:root /usr/lib/openssh/ssh-keysign
+4754 root:messagebus /usr/lib/dbus-1.0/dbus-daemon-launch-helper
+6755 root:root /usr/lib/xorg/Xorg.wrap

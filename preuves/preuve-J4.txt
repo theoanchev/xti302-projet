@@ -1,0 +1,6 @@
+PREUVE J4 - ANALYSE DES JOURNAUX
+Fri Nov  6 10:00:39 AM CET 2026
+Test normal : code 0
+Test simulé : cinq échecs pour testadmin depuis 192.0.2.10
+Test du seuil : code 1
+Résultat : SUCCES
