@@ -19,9 +19,9 @@ Références ANSSI : guide *Recommandations pour un usage sécurisé d'(Open)SSH
 | S3 | `AllowGroups acces_ssh` ; invités limités au SFTP (`Match Group invite`, `ForceCommand internal-sftp`, `PermitTTY no`) | `test_S3`, `test_S_invite` | SSH-R22, SSH-R24 |
 | S4 | `MaxAuthTries 3`, `LoginGraceTime 30`, `ChannelTimeout session=10m`, `ClientAliveInterval 300` × `ClientAliveCountMax 2` | `test_S4` (2 tests) | |
 | S5 | `/etc/ssh/sshd_config.d/10-durcissement.conf` (root, 0644) ; `installer.sh` lance `sshd -t` avant `systemctl reload ssh` et retire le fichier s'il est invalide | `test_S5` | |
-| J1 | (à compléter – Adrien) | `test_J1` | |
+| J1 | Jail `sshd` dans `config/fail2ban/jail.d/sshd.conf` : lecture du journal systemd, 3 échecs en 10 minutes, adresse bannie 1 heure via nftables (table `f2b-table`). Installée par `installer.sh`, après le pare-feu | `test_J1` (2 tests) | |
 | J2 | `/etc/nftables.conf` : table `inet filtre`, entrée `policy drop`, acceptées : connexions établies, boucle locale, TCP 22 ; transit `drop` ; service `nftables` activé au démarrage | `test_J2` (2 tests) ; depuis l'hôte : `nmap` ne voit que le port 22 | SSH-R27 (complément pare-feu) |
-| J3 | (à compléter – Adrien) | `test_J3` | |
+| J3 | `Storage=persistent` dans `config/journald.conf`, installé par `installer.sh` sous `/etc/systemd/journald.conf.d/persistant.conf` | `test_J3` | |
 | J4 | (à compléter – El Yazid) | `test_J4` | |
 | B1 | Second disque (2 Go) formaté une seule fois en ext4, étiquette `sauvegardes`, monté sur `/sauvegardes` par UUID dans `/etc/fstab` (`nodev,nosuid,noexec,nofail`). Script `sauvegarde.sh` : (à compléter – Adrien) | `test_B1_disque`, `test_B1` | |
 | B2 | (à compléter – Adrien) | `test_B2` | |
@@ -70,7 +70,15 @@ Références ANSSI : guide *Recommandations pour un usage sécurisé d'(Open)SSH
 - **`set -u` conservé** : une variable non définie est une erreur de programmation.
 
 ### Comptes, sudo, journaux, sauvegarde
-(à compléter – Adrien et El Yazid)
+### Journaux et fail2ban (Adrien)
+- **`backend = systemd`** : sur une Debian 13 minimale, il n'y a pas de fichier `/var/log/auth.log`. fail2ban lit donc directement le journal systemd (unité `ssh.service`).
+- **`filter = sshd[mode=aggressive]`** : ce mode regroupe les modes `normal`, `ddos` et `extra`, et détecte donc aussi les connexions abandonnées avant authentification, que le mode par défaut laisse passer.
+- **`maxretry = 3`** : aligné sur `MaxAuthTries 3` de SSH. Un utilisateur légitime avec sa clé n'échoue pas.
+- **`findtime = 10m`** : les 3 échecs doivent tenir dans cette fenêtre, pour que des erreurs espacées dans la journée ne bannissent personne.
+- **`bantime = 1h`** : le mot de passe étant désactivé, le bannissement ne protège pas d'une devinette (impossible) mais réduit le bruit et la charge des tentatives automatisées. Une heure décourage les robots sans bloquer longtemps un administrateur qui se trompe.
+- **`banaction = nftables`** : le bannissement passe par le pare-feu de Théo, dans une table séparée (`f2b-table`), qui n'est pas supprimée lors du rechargement de `nftables.conf`.
+- **Aucun `ignoreip` ajouté** : l'adresse de l'hôte n'est pas exemptée, le bannissement s'applique donc aussi à nos propres tests. Le débannissement se fait avec `fail2ban-client set sshd unbanip <IP>`.
+- **`Storage=persistent` (J3)** : par défaut (`auto`), le journal reste en mémoire et disparaît au redémarrage tant que `/var/log/journal` n'existe pas. `persistent` l'écrit sur le disque et le crée si besoin, ce qui permet d'analyser une attaque après un redémarrage. `analyse_logs.sh` et les traces de fail2ban en dépendent.
 
 ## 3. Défense
 

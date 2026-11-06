@@ -166,7 +166,7 @@ test_scripts_root() {
     fi
 }
 
-# ============ A completer : C1-C4, J1, J3, J4, B1-B4, D2, D3 (une fonction par test) ============
+# ============ A completer : C3-C4, J4, B1-B4, D2, D3 (une fonction par test) ============
 
 # ================= Comptes et droits (C1, C2) : Adrien =================
 
@@ -243,6 +243,40 @@ test_C2() {
 }
 
 
+# ======================= Journaux et defense (J1, J3) : Adrien =======================
+
+# J1 : fail2ban actif, jail sshd en marche et parametree, regles presentes dans nftables.
+test_J1() {
+    local maxretry bantime
+    maxretry="$(fail2ban-client get sshd maxretry 2>/dev/null)"
+    bantime="$(fail2ban-client get sshd bantime 2>/dev/null)"
+    if systemctl is-active --quiet fail2ban \
+       && systemctl is-enabled --quiet fail2ban \
+       && fail2ban-client status sshd >/dev/null 2>&1 \
+       && [[ "$maxretry" =~ ^[0-9]+$ && "$maxretry" -ge 1 && "$maxretry" -le 5 ]] \
+       && [[ "$bantime" =~ ^[0-9]+$ && "$bantime" -ge 600 ]]; then
+        ok "J1" "fail2ban protege SSH (jail sshd : $maxretry echecs, bannissement ${bantime}s)"
+    else
+        ko "J1" "fail2ban inactif, jail sshd absente ou mal parametree (maxretry='$maxretry' bantime='$bantime')"
+    fi
+    if nft list ruleset 2>/dev/null | grep -q 'f2b-table'; then
+        ok "J1" "les regles de bannissement de fail2ban sont presentes dans nftables"
+    else
+        ko "J1" "la table nftables de fail2ban est absente (bannissement inefficace)"
+    fi
+}
+
+# J3 : le journal systemd est conserve apres un redemarrage.
+test_J3() {
+    if grep -rqsE '^[[:space:]]*Storage=persistent' /etc/systemd/journald.conf /etc/systemd/journald.conf.d \
+       && [[ -d /var/log/journal ]] \
+       && find /var/log/journal -name '*.journal' 2>/dev/null | grep -q .; then
+        ok "J3" "journal persistant (Storage=persistent, fichiers dans /var/log/journal)"
+    else
+        ko "J3" "le journal n'est pas persistant (il sera perdu au redemarrage)"
+    fi
+}
+
 main() {
     verifier_root
     charger_sshd
@@ -254,7 +288,9 @@ main() {
     test_S4
     test_S5
     test_S_invite
+    test_J1
     test_J2
+    test_J3
     test_D1
     test_B1_disque
     test_scripts_root
