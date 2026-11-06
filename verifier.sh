@@ -501,10 +501,11 @@ test_D2() {
         return
     fi
 
-    # Le client DHCP (UDP 68) obtient l'adresse IP de la VM : il n'offre aucun service
-    # et le pare-feu bloque tout trafic entrant hors SSH (justifie dans DOSSIER.md, D2).
+    # Les clients DHCP (UDP 68 en IPv4, UDP 546 en IPv6) obtiennent les adresses de la VM :
+    # ils n'offrent aucun service et le pare-feu bloque tout trafic entrant hors SSH
+    # (justifie dans DOSSIER.md, D2).
     if printf '%s\n' "$LISTEN" | awk '
-    $1 == "udp" && $5 ~ /:68$/ { next }
+    $1 == "udp" && ($5 ~ /:68$/ || $5 ~ /:546$/) { next }
     {
         addr=$5
         sub(/^.*:/, "", addr)
@@ -516,7 +517,7 @@ test_D2() {
     END {
         exit !(count > 0 && bad == 0)
     }'; then
-        ok "D2" "seul le port SSH 22 est en ecoute (hors client DHCP)"
+        ok "D2" "seul le port SSH 22 est en ecoute (hors clients DHCP)"
     else
         ko "D2" "un autre port est en ecoute ou SSH est absent"
     fi
