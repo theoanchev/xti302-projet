@@ -12,6 +12,11 @@ set -u
 
 REUSSIS=0
 TOTAL=0
+CSV=""
+for candidat in "$(dirname "$(readlink -f "$0")")/comptes.csv" ./comptes.csv /usr/local/share/xti302/comptes.csv; do
+    [[ -r "$candidat" ]] && { CSV="$candidat"; break; }
+done
+
 
 ok() { REUSSIS=$((REUSSIS + 1)); TOTAL=$((TOTAL + 1)); echo "[OK] $1 $2"; }
 ko() { TOTAL=$((TOTAL + 1)); echo "[KO] $1 $2"; }
@@ -163,9 +168,86 @@ test_scripts_root() {
 
 # ============ A completer : C1-C4, J1, J3, J4, B1-B4, D2, D3 (une fonction par test) ============
 
+# ================= Comptes et droits (C1, C2) : Adrien =================
+
+# C1 : chaque compte de comptes.csv existe avec le bon groupe principal et les bons groupes secondaires.
+test_C1() {
+    local login nom gp gs g erreurs=""
+    if [[ -z "$CSV" ]]; then
+        ko "C1" "comptes.csv introuvable (lancer verifier.sh depuis la racine du depot)"
+        return
+    fi
+    while IFS=';' read -r login nom gp gs; do
+        [[ -n "$login" ]] || continue
+        if ! id "$login" >/dev/null 2>&1; then
+            erreurs+=" $login(absent)"
+            continue
+        fi
+        [[ "$(id -gn "$login")" == "$gp" ]] || erreurs+=" $login(groupe principal != $gp)"
+        for g in ${gs//,/ }; do
+            id -nG "$login" | tr ' ' '\n' | grep -qx "$g" || erreurs+=" $login(pas dans $g)"
+        done
+    done < <(tail -n +2 "$CSV" | tr -d '\r')
+
+    if [[ -z "$erreurs" ]]; then
+        ok "C1" "tous les comptes de comptes.csv existent avec les bons groupes"
+    else
+        ko "C1" "ecarts :$erreurs"
+    fi
+}
+
+# C2 : droits sur /srv (ce qui doit marcher ET ce qui doit etre refuse) + ACL par defaut.
+test_C2() {
+    local erreurs="" ligne user droit chemin attendu reel f
+    local regles=(
+        "mdubois:r:/srv/donnees_brutes:oui"
+        "mdubois:w:/srv/donnees_brutes:oui"
+        "ncarpentier:r:/srv/donnees_brutes:oui"
+        "ncarpentier:w:/srv/donnees_brutes:non"
+        "ymoreau:r:/srv/donnees_brutes:oui"
+        "ymoreau:w:/srv/donnees_brutes:non"
+        "invite1:r:/srv/donnees_brutes:non"
+        "ncarpentier:w:/srv/analyses:oui"
+        "ymoreau:w:/srv/analyses:oui"
+        "mdubois:r:/srv/analyses:non"
+        "invite1:r:/srv/analyses:non"
+        "ncarpentier:w:/srv/publications:oui"
+        "ymoreau:r:/srv/publications:oui"
+        "ymoreau:w:/srv/publications:non"
+        "invite1:r:/srv/publications:oui"
+        "invite1:w:/srv/publications:non"
+        "mdubois:r:/srv/publications:non"
+    )
+
+    for ligne in "${regles[@]}"; do
+        IFS=: read -r user droit chemin attendu <<< "$ligne"
+        if sudo -u "$user" test "-$droit" "$chemin" 2>/dev/null; then reel="oui"; else reel="non"; fi
+        [[ "$reel" == "$attendu" ]] || erreurs+=" $user -$droit $chemin (attendu: $attendu)"
+    done
+
+    # ACL par defaut : un fichier cree plus tard doit heriter des droits du dossier.
+    f="/srv/donnees_brutes/.test_c2_verifier"
+    if sudo -u mdubois touch "$f" 2>/dev/null; then
+        sudo -u ncarpentier test -r "$f" 2>/dev/null || erreurs+=" ACL par defaut : un chercheur ne lit pas un nouveau fichier"
+        sudo -u ncarpentier test -w "$f" 2>/dev/null && erreurs+=" ACL par defaut : un chercheur ecrit dans un fichier de technique"
+        rm -f "$f"
+    else
+        erreurs+=" technique ne peut pas creer de fichier dans donnees_brutes"
+    fi
+
+    if [[ -z "$erreurs" ]]; then
+        ok "C2" "droits /srv conformes (autorises et refuses) et ACL par defaut actives"
+    else
+        ko "C2" "ecarts :$erreurs"
+    fi
+}
+
+
 main() {
     verifier_root
     charger_sshd
+    test_C1
+    test_C2
     test_S1
     test_S2
     test_S3

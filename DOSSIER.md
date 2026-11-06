@@ -10,8 +10,8 @@ Références ANSSI : guide *Recommandations pour un usage sécurisé d'(Open)SSH
 
 | ID | Ce qui a été fait | Test (`verifier.sh`) | ANSSI |
 |---|---|---|---|
-| C1 | (à compléter – Adrien) | `test_C1` | |
-| C2 | (à compléter – Adrien) | `test_C2` | |
+| C1 |creer_comptes.sh lit comptes.csv, crée les groupes puis les comptes (useradd ou usermod si le compte existe), met /usr/sbin/nologin aux membres de invite et installe les clés publiques de config/cles/. Idempotent : l’existence de chaque groupe et de chaque compte est testée avant création.| `test_C1` | |
+| C2 |/srv/donnees_brutes, /srv/analyses et /srv/publications en root:root 0700, puis ACL par groupe (setfacl -m) et ACL par défaut (setfacl -d -m) pour les fichiers futurs. setfacl -b au début remet les ACL à zéro à chaque exécution.| `test_C2` | |
 | C3 | Fichier `config/sudoers.d/admins` (à compléter – El Yazid). `installer.sh` vérifie chaque fichier sudoers avec `visudo -c`, l'installe en root 0440, puis vide le groupe `sudo` du compte d'installation une fois les admins en place. Scripts lancés en root installés dans `/usr/local/sbin`, propriétaire root, 0755 | `test_C3`, `test_scripts_root` | |
 | C4 | `passwd -l root` ; répertoires personnels en 0700 et `HOME_MODE 0700` pour les comptes futurs (dans `installer.sh`) | `test_C4` (à compléter – El Yazid) | |
 | S1 | `PasswordAuthentication no`, `KbdInteractiveAuthentication no`, `AuthenticationMethods publickey` ; clés ed25519 | `test_S1` ; depuis l'hôte : `ssh -o PubkeyAuthentication=no` → « Permission denied (publickey) » | SSH-R17 |
@@ -32,6 +32,14 @@ Références ANSSI : guide *Recommandations pour un usage sécurisé d'(Open)SSH
 | D3 | (à compléter – El Yazid) | `test_D3` | |
 
 ## 2. Choix techniques
+
+### Comptes et droits sur /srv (Adrien)
+- **ACL plutôt que de simples groupes propriétaires** : un dossier n'a qu'un groupe propriétaire. Les ACL permettent des droits différents pour plusieurs groupes sur le même dossier (ex. chercheurs en écriture et doctorants en lecture sur /srv/publications).
+- **ACL par défaut** : sans elles, un fichier créé plus tard par un utilisateur n'hériterait pas des droits du dossier.
+- **`rwX` avec un X majuscule** : l'exécution n'est donnée qu'aux dossiers (pour les traverser), pas aux fichiers ordinaires.
+- **Dossiers en 0700 et `o::---`** : les « autres » n'ont aucun droit, aujourd'hui comme pour les fichiers futurs.
+- **Aucun mot de passe dans le dépôt** : les mots de passe des administrateurs sont définis à la main après l'installation (`passwd`), et la connexion SSH se fait par clé.
+- **`usermod -a -G`** : ajoute des groupes sans en retirer, pour ne pas supprimer par erreur un groupe déjà attribué.
 
 ### Accès SSH (Théo)
 - **3 essais au lieu de 4** : un utilisateur légitime avec une clé réussit du premier coup. 3 laisse de la marge si plusieurs clés sont proposées. Au-delà, fail2ban (J1) bannit l'adresse.
