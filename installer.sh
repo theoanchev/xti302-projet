@@ -251,6 +251,13 @@ installer_scripts() {
             log "script installe : /usr/local/sbin/$script"
         fi
     done
+    # Seuil d'alerte de analyse_logs.sh (J4). Ce fichier est lu ("source") par un
+    # script lance en root via sudo : il doit appartenir a root et n'etre
+    # modifiable que par lui, sinon support pourrait y injecter des commandes.
+    if [[ -f "$DEPOT/config/analyse-logs" ]]; then
+        install -o root -g root -m 0644 "$DEPOT/config/analyse-logs" /etc/default/analyse-logs
+        log "seuil d'alerte installe : /etc/default/analyse-logs"
+    fi
 }
 
 # ================= Planification de la sauvegarde (B2, Adrien) ===================
