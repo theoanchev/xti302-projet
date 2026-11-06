@@ -1,0 +1,29 @@
+=== PREUVE CONFIGURATION SUPPORT ===
+Thu Nov  5 11:08:34 PM CET 2026
+
+=== DROITS DU COMPTE ===
+uid=1001(support) gid=1003(support) groups=1003(support),1002(acces_ssh)
+Matching Defaults entries for support on Debian-XTI302:
+    env_reset, mail_badpass,
+    secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin,
+    use_pty
+
+User support may run the following commands on Debian-XTI302:
+    (root) NOPASSWD: /usr/local/sbin/analyse_logs.sh
+
+=== TEST AUTORISE ===
+=== ANALYSE DES JOURNAUX SSH ===
+Période : 24 hours ago
+Seuil : 5 tentatives par IP
+
+=== TENTATIVES ECHOUEES PAR IP ===
+Aucune tentative échouée détectée.
+
+=== CONNEXIONS REUSSIES ===
+18
+
+=== ANALYSE TERMINEE ===
+
+=== TEST INTERDIT ===
+sudo: a password is required
+Code retour du test interdit : 1

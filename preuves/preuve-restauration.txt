@@ -1,0 +1,6 @@
+PREUVE B4 - TEST DE RESTAURATION
+Fri Nov  6 09:55:13 AM CET 2026
+Sauvegarde utilisée : /backup/versions/20261106_095513
+Fichier supprimé puis restauré avec rsync.
+Vérification du contenu : REUSSIE
+RESULTAT : SUCCES

@@ -1,0 +1,6 @@
+PREUVE D2 - VERIFICATION DES PORTS
+Fri Nov  6 09:55:41 AM CET 2026
+
+Netid State  Recv-Q Send-Q Local Address:Port Peer Address:PortProcess
+tcp   LISTEN 0      128          0.0.0.0:22        0.0.0.0:*    users:(("sshd",pid=788,fd=6))
+tcp   LISTEN 0      128             [::]:22           [::]:*    users:(("sshd",pid=788,fd=7))

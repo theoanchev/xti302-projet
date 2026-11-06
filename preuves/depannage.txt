@@ -1,0 +1,17 @@
+XTI302-CYB - Simulations de dépannage
+Responsable : El Yazid - Membre 3
+
+1. Erreur SSH
+Problème : PasswordAuthentication est activé.
+Vérification : sshd -T | grep passwordauthentication
+Correction : remettre PasswordAuthentication no.
+
+2. Droits sudo de support
+Problème : le compte support possède trop de privilèges.
+Vérification : sudo -l -U support
+Correction : autoriser uniquement analyse_logs.sh.
+
+3. Pare-feu
+Problème : la politique INPUT n'est pas en DROP.
+Vérification : nft list ruleset
+Correction : rétablir DROP tout en autorisant SSH et les connexions établies.
